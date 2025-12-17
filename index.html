@@ -1,0 +1,680 @@
+import React, { useState, useEffect } from 'react';
+import { Download, Plus, Settings, BarChart3, Trash2, Save } from 'lucide-react';
+
+const BankSampahApp = () => {
+  const [activeTab, setActiveTab] = useState('input');
+  const [transactions, setTransactions] = useState([]);
+  const [priceSettings, setPriceSettings] = useState({
+    'Plastik': 2000,
+    'Kertas': 1500,
+    'Botol': 3000,
+    'Kaleng': 4000,
+    'Kardus': 1000
+  });
+  const [modePisahJenis, setModePisahJenis] = useState(true);
+  const [hargaAkumulasi, setHargaAkumulasi] = useState(2000);
+  const [formData, setFormData] = useState({
+    kelas: 'X1',
+    jenisSampah: 'Plastik',
+    berat: '',
+    petugas: ''
+  });
+  const [editPrices, setEditPrices] = useState({...priceSettings});
+  const [editHargaAkumulasi, setEditHargaAkumulasi] = useState(2000);
+  const [filterPeriod, setFilterPeriod] = useState('all');
+
+  const kelasOptions = [
+    'X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'X7', 'X8', 'X9',
+    'XI A', 'XI B', 'XI C', 'XI D', 'XI E', 'XI F', 'XI G', 'XI H', 'XI I',
+    'XII A', 'XII B', 'XII C', 'XII D', 'XII E', 'XII F', 'XII G', 'XII H', 'XII I'
+  ];
+
+  const jenisSampahOptions = Object.keys(priceSettings);
+
+  // Load data dari storage saat pertama kali
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const txResult = await window.storage.get('transactions');
+      const priceResult = await window.storage.get('prices');
+      const modeResult = await window.storage.get('modePisahJenis');
+      const hargaAkumResult = await window.storage.get('hargaAkumulasi');
+      
+      if (txResult) {
+        setTransactions(JSON.parse(txResult.value));
+      } else {
+        // Data dummy
+        const dummyData = [
+          {
+            id: Date.now() - 86400000,
+            kelas: 'X1',
+            jenisSampah: 'Plastik',
+            berat: 5.5,
+            hargaPerKg: 2000,
+            totalHarga: 11000,
+            tanggal: new Date(Date.now() - 86400000).toISOString(),
+            petugas: 'Ahmad'
+          },
+          {
+            id: Date.now() - 172800000,
+            kelas: 'XI A',
+            jenisSampah: 'Kertas',
+            berat: 8.2,
+            hargaPerKg: 1500,
+            totalHarga: 12300,
+            tanggal: new Date(Date.now() - 172800000).toISOString(),
+            petugas: 'Siti'
+          },
+          {
+            id: Date.now() - 259200000,
+            kelas: 'XII B',
+            jenisSampah: 'Botol',
+            berat: 3.5,
+            hargaPerKg: 3000,
+            totalHarga: 10500,
+            tanggal: new Date(Date.now() - 259200000).toISOString(),
+            petugas: 'Budi'
+          }
+        ];
+        setTransactions(dummyData);
+        await window.storage.set('transactions', JSON.stringify(dummyData));
+      }
+      
+      if (priceResult) {
+        const prices = JSON.parse(priceResult.value);
+        setPriceSettings(prices);
+        setEditPrices(prices);
+      }
+
+      if (modeResult) {
+        setModePisahJenis(JSON.parse(modeResult.value));
+      }
+
+      if (hargaAkumResult) {
+        const harga = JSON.parse(hargaAkumResult.value);
+        setHargaAkumulasi(harga);
+        setEditHargaAkumulasi(harga);
+      }
+    } catch (error) {
+      console.log('Memuat data baru');
+    }
+  };
+
+  const saveData = async (newTransactions) => {
+    try {
+      await window.storage.set('transactions', JSON.stringify(newTransactions));
+    } catch (error) {
+      console.error('Error saving data:', error);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.berat || !formData.petugas) {
+      alert('Mohon lengkapi semua field!');
+      return;
+    }
+
+    const berat = parseFloat(formData.berat);
+    let hargaPerKg, jenisSampah;
+    
+    if (modePisahJenis) {
+      hargaPerKg = priceSettings[formData.jenisSampah];
+      jenisSampah = formData.jenisSampah;
+    } else {
+      hargaPerKg = hargaAkumulasi;
+      jenisSampah = 'Akumulasi';
+    }
+    
+    const totalHarga = berat * hargaPerKg;
+
+    const newTransaction = {
+      id: Date.now(),
+      kelas: formData.kelas,
+      jenisSampah: jenisSampah,
+      berat: berat,
+      hargaPerKg: hargaPerKg,
+      totalHarga: totalHarga,
+      tanggal: new Date().toISOString(),
+      petugas: formData.petugas
+    };
+
+    const newTransactions = [newTransaction, ...transactions];
+    setTransactions(newTransactions);
+    await saveData(newTransactions);
+
+    setFormData({
+      kelas: 'X1',
+      jenisSampah: 'Plastik',
+      berat: '',
+      petugas: ''
+    });
+
+    alert('Data berhasil ditambahkan!');
+  };
+
+  const handleDeleteTransaction = async (id) => {
+    if (confirm('Yakin ingin menghapus data ini?')) {
+      const newTransactions = transactions.filter(t => t.id !== id);
+      setTransactions(newTransactions);
+      await saveData(newTransactions);
+    }
+  };
+
+  const handleSavePrices = async () => {
+    setPriceSettings(editPrices);
+    setHargaAkumulasi(editHargaAkumulasi);
+    try {
+      await window.storage.set('prices', JSON.stringify(editPrices));
+      await window.storage.set('hargaAkumulasi', JSON.stringify(editHargaAkumulasi));
+      alert('Harga berhasil diperbarui!');
+    } catch (error) {
+      console.error('Error saving prices:', error);
+    }
+  };
+
+  const handleToggleMode = async () => {
+    const newMode = !modePisahJenis;
+    setModePisahJenis(newMode);
+    try {
+      await window.storage.set('modePisahJenis', JSON.stringify(newMode));
+    } catch (error) {
+      console.error('Error saving mode:', error);
+    }
+  };
+
+  const handlePriceChange = (jenis, value) => {
+    setEditPrices(prev => ({
+      ...prev,
+      [jenis]: parseFloat(value) || 0
+    }));
+  };
+
+  const getFilteredTransactions = () => {
+    const now = new Date();
+    const filtered = transactions.filter(t => {
+      const txDate = new Date(t.tanggal);
+      switch(filterPeriod) {
+        case 'today':
+          return txDate.toDateString() === now.toDateString();
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          return txDate >= weekAgo;
+        case 'month':
+          return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+        default:
+          return true;
+      }
+    });
+    return filtered;
+  };
+
+  const getSummary = () => {
+    const filtered = getFilteredTransactions();
+    
+    const totalBerat = filtered.reduce((sum, t) => sum + t.berat, 0);
+    const totalNilai = filtered.reduce((sum, t) => sum + t.totalHarga, 0);
+    
+    const perKelas = {};
+    const perJenis = {};
+    
+    filtered.forEach(t => {
+      if (!perKelas[t.kelas]) {
+        perKelas[t.kelas] = { berat: 0, nilai: 0, count: 0 };
+      }
+      perKelas[t.kelas].berat += t.berat;
+      perKelas[t.kelas].nilai += t.totalHarga;
+      perKelas[t.kelas].count += 1;
+      
+      if (!perJenis[t.jenisSampah]) {
+        perJenis[t.jenisSampah] = { berat: 0, nilai: 0, count: 0 };
+      }
+      perJenis[t.jenisSampah].berat += t.berat;
+      perJenis[t.jenisSampah].nilai += t.totalHarga;
+      perJenis[t.jenisSampah].count += 1;
+    });
+    
+    return { totalBerat, totalNilai, perKelas, perJenis };
+  };
+
+  const exportToCSV = () => {
+    const filtered = getFilteredTransactions();
+    
+    // Header
+    let csv = 'Tanggal,Kelas,Jenis Sampah,Berat (kg),Harga per Kg,Total Harga,Petugas\n';
+    
+    filtered.forEach(t => {
+      const tanggal = new Date(t.tanggal).toLocaleString('id-ID');
+      csv += `"${tanggal}","${t.kelas}","${t.jenisSampah}",${t.berat},${t.hargaPerKg},${t.totalHarga},"${t.petugas}"\n`;
+    });
+    
+    // Summary
+    const summary = getSummary();
+    csv += '\n\nRINGKASAN\n';
+    csv += `Total Berat,${summary.totalBerat.toFixed(2)} kg\n`;
+    csv += `Total Nilai,Rp ${summary.totalNilai.toLocaleString('id-ID')}\n`;
+    
+    csv += '\n\nREKAP PER KELAS\n';
+    csv += 'Kelas,Jumlah Transaksi,Total Berat (kg),Total Nilai (Rp)\n';
+    Object.entries(summary.perKelas).forEach(([kelas, data]) => {
+      csv += `"${kelas}",${data.count},${data.berat.toFixed(2)},${data.nilai.toLocaleString('id-ID')}\n`;
+    });
+    
+    csv += '\n\nREKAP PER JENIS SAMPAH\n';
+    csv += 'Jenis Sampah,Jumlah Transaksi,Total Berat (kg),Total Nilai (Rp)\n';
+    Object.entries(summary.perJenis).forEach(([jenis, data]) => {
+      csv += `"${jenis}",${data.count},${data.berat.toFixed(2)},${data.nilai.toLocaleString('id-ID')}\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `bank-sampah-${filterPeriod}-${Date.now()}.csv`;
+    link.click();
+  };
+
+  const summary = getSummary();
+  const filteredTransactions = getFilteredTransactions();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+      {/* Header */}
+      <div className="bg-green-600 text-white p-6 shadow-lg">
+        <h1 className="text-3xl font-bold text-center">Bank Sampah SMAN 2 Trenggalek</h1>
+        <p className="text-center text-green-100 mt-2">Powered by: Adiwiyata Bakti Mandala</p>
+      </div>
+
+      {/* Navigation */}
+      <div className="bg-white shadow-md">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex space-x-1">
+            {[
+              { id: 'input', label: 'Input Data', icon: Plus },
+              { id: 'rekap', label: 'Rekap & Ringkasan', icon: BarChart3 },
+              { id: 'pengaturan', label: 'Pengaturan Harga', icon: Settings }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-green-600 text-white border-b-4 border-green-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <tab.icon size={20} />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Tab: Input Data */}
+        {activeTab === 'input' && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Pencatatan Sampah Masuk</h2>
+              
+              {/* Toggle Mode */}
+              <div className="flex items-center space-x-3 bg-gray-100 p-3 rounded-lg">
+                <span className="text-sm font-medium text-gray-700">Mode Input:</span>
+                <button
+                  onClick={handleToggleMode}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    modePisahJenis ? 'bg-green-600' : 'bg-blue-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      modePisahJenis ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm font-medium text-gray-700">
+                  {modePisahJenis ? 'Pisah Jenis' : 'Akumulasi'}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+              <p className="text-sm text-blue-800">
+                {modePisahJenis ? (
+                  <><strong>Mode Pisah Jenis:</strong> Pilih jenis sampah dan harga akan disesuaikan per jenis.</>
+                ) : (
+                  <><strong>Mode Akumulasi:</strong> Semua sampah dihitung dengan harga tetap per kg tanpa membedakan jenis.</>
+                )}
+              </p>
+            </div>
+            
+            <div className="space-y-4 max-w-2xl">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Kelas</label>
+                <select
+                  name="kelas"
+                  value={formData.kelas}
+                  onChange={handleInputChange}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  {kelasOptions.map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Jenis Sampah</label>
+                {modePisahJenis ? (
+                  <select
+                    name="jenisSampah"
+                    value={formData.jenisSampah}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    {jenisSampahOptions.map(j => (
+                      <option key={j} value={j}>{j} (Rp {priceSettings[j].toLocaleString('id-ID')}/kg)</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full p-3 border border-gray-300 rounded-lg bg-gray-50">
+                    <span className="text-gray-700">Akumulasi Semua Jenis (Rp {hargaAkumulasi.toLocaleString('id-ID')}/kg)</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Berat (kg)</label>
+                <input
+                  type="number"
+                  name="berat"
+                  value={formData.berat}
+                  onChange={handleInputChange}
+                  step="0.1"
+                  min="0"
+                  placeholder="Contoh: 5.5"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nama Petugas</label>
+                <input
+                  type="text"
+                  name="petugas"
+                  value={formData.petugas}
+                  onChange={handleInputChange}
+                  placeholder="Nama petugas yang menginput"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              {formData.berat && (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Preview Perhitungan:</p>
+                  <p className="text-lg font-semibold text-green-700">
+                    {formData.berat} kg × Rp {(modePisahJenis ? priceSettings[formData.jenisSampah] : hargaAkumulasi).toLocaleString('id-ID')}/kg = 
+                    Rp {(parseFloat(formData.berat) * (modePisahJenis ? priceSettings[formData.jenisSampah] : hargaAkumulasi)).toLocaleString('id-ID')}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center space-x-2"
+              >
+                <Plus size={20} />
+                <span>Tambah Data</span>
+              </button>
+            </div>
+
+            {/* Daftar Transaksi Terbaru */}
+            <div className="mt-8">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Data Terbaru</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-3 text-left">Tanggal</th>
+                      <th className="border p-3 text-left">Kelas</th>
+                      <th className="border p-3 text-left">Jenis</th>
+                      <th className="border p-3 text-right">Berat (kg)</th>
+                      <th className="border p-3 text-right">Total (Rp)</th>
+                      <th className="border p-3 text-left">Petugas</th>
+                      <th className="border p-3">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.slice(0, 10).map(t => (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="border p-3 text-sm">
+                          {new Date(t.tanggal).toLocaleString('id-ID')}
+                        </td>
+                        <td className="border p-3 font-medium">{t.kelas}</td>
+                        <td className="border p-3">{t.jenisSampah}</td>
+                        <td className="border p-3 text-right">{t.berat.toFixed(2)}</td>
+                        <td className="border p-3 text-right font-medium">
+                          {t.totalHarga.toLocaleString('id-ID')}
+                        </td>
+                        <td className="border p-3">{t.petugas}</td>
+                        <td className="border p-3 text-center">
+                          <button
+                            onClick={() => handleDeleteTransaction(t.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Rekap & Ringkasan */}
+        {activeTab === 'rekap' && (
+          <div className="space-y-6">
+            {/* Filter & Export */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter Periode</label>
+                  <select
+                    value={filterPeriod}
+                    onChange={(e) => setFilterPeriod(e.target.value)}
+                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="all">Semua Data</option>
+                    <option value="today">Hari Ini</option>
+                    <option value="week">7 Hari Terakhir</option>
+                    <option value="month">Bulan Ini</option>
+                  </select>
+                </div>
+                
+                <button
+                  onClick={exportToCSV}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                >
+                  <Download size={20} />
+                  <span>Ekspor ke CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Ringkasan Angka */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-medium mb-2">Total Berat Sampah</h3>
+                <p className="text-4xl font-bold">{summary.totalBerat.toFixed(2)} kg</p>
+                <p className="text-green-100 mt-2">{filteredTransactions.length} transaksi</p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-medium mb-2">Total Nilai</h3>
+                <p className="text-4xl font-bold">Rp {summary.totalNilai.toLocaleString('id-ID')}</p>
+                <p className="text-blue-100 mt-2">Akumulasi nilai sampah</p>
+              </div>
+            </div>
+
+            {/* Rekap Per Kelas */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Rekap Per Kelas</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-3 text-left">Kelas</th>
+                      <th className="border p-3 text-right">Jumlah Transaksi</th>
+                      <th className="border p-3 text-right">Total Berat (kg)</th>
+                      <th className="border p-3 text-right">Total Nilai (Rp)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summary.perKelas)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([kelas, data]) => (
+                        <tr key={kelas} className="hover:bg-gray-50">
+                          <td className="border p-3 font-medium">{kelas}</td>
+                          <td className="border p-3 text-right">{data.count}</td>
+                          <td className="border p-3 text-right">{data.berat.toFixed(2)}</td>
+                          <td className="border p-3 text-right font-medium">
+                            {data.nilai.toLocaleString('id-ID')}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Rekap Per Jenis Sampah */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Rekap Per Jenis Sampah</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-3 text-left">Jenis Sampah</th>
+                      <th className="border p-3 text-right">Jumlah Transaksi</th>
+                      <th className="border p-3 text-right">Total Berat (kg)</th>
+                      <th className="border p-3 text-right">Total Nilai (Rp)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summary.perJenis).map(([jenis, data]) => (
+                      <tr key={jenis} className="hover:bg-gray-50">
+                        <td className="border p-3 font-medium">{jenis}</td>
+                        <td className="border p-3 text-right">{data.count}</td>
+                        <td className="border p-3 text-right">{data.berat.toFixed(2)}</td>
+                        <td className="border p-3 text-right font-medium">
+                          {data.nilai.toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Pengaturan Harga */}
+        {activeTab === 'pengaturan' && (
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">Pengaturan Harga Per Kg</h2>
+            
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+              <p className="text-sm text-yellow-800">
+                <strong>Catatan:</strong> Perubahan harga hanya berlaku untuk transaksi baru. 
+                Data lama tidak terpengaruh.
+              </p>
+            </div>
+
+            {/* Harga Akumulasi */}
+            <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+              <h3 className="font-bold text-blue-900 mb-3">Harga Mode Akumulasi</h3>
+              <p className="text-sm text-blue-800 mb-3">
+                Harga ini digunakan ketika mode "Akumulasi" aktif (semua jenis sampah dihitung sama).
+              </p>
+              <div className="flex items-center space-x-3">
+                <label className="font-medium text-blue-900">Harga Akumulasi</label>
+                <span className="text-blue-700">Rp</span>
+                <input
+                  type="number"
+                  value={editHargaAkumulasi}
+                  onChange={(e) => setEditHargaAkumulasi(parseFloat(e.target.value) || 0)}
+                  min="0"
+                  step="100"
+                  className="w-40 p-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-blue-700">/kg</span>
+              </div>
+            </div>
+
+            {/* Harga Per Jenis */}
+            <div className="mb-6">
+              <h3 className="font-bold text-gray-900 mb-3">Harga Per Jenis Sampah</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Harga ini digunakan ketika mode "Pisah Jenis" aktif.
+              </p>
+              <div className="space-y-4">
+                {Object.entries(editPrices).map(([jenis, harga]) => (
+                  <div key={jenis} className="flex items-center justify-between p-4 border rounded-lg">
+                    <label className="font-medium text-gray-700">{jenis}</label>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-gray-600">Rp</span>
+                      <input
+                        type="number"
+                        value={harga}
+                        onChange={(e) => handlePriceChange(jenis, e.target.value)}
+                        min="0"
+                        step="100"
+                        className="w-32 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      />
+                      <span className="text-gray-600">/kg</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleSavePrices}
+              className="w-full mt-6 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center space-x-2"
+            >
+              <Save size={20} />
+              <span>Simpan Perubahan</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="bg-gray-800 text-white p-6 mt-12">
+        <p className="text-center text-sm">
+          © 2024 Bank Sampah SMAN 2 Trenggalek - Adiwiyata Bakti Mandala
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default BankSampahApp;
