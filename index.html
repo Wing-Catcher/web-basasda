@@ -153,6 +153,10 @@
           const [beratPerJenis, setBeratPerJenis] = useState({});
           const [nomorKuponList, setNomorKuponList] = useState([]);
           const [showKuponInput, setShowKuponInput] = useState(false);
+          const [kuponPage, setKuponPage] = useState(0);
+          const [editingKupon, setEditingKupon] = useState(null);
+          const [editNomorValue, setEditNomorValue] = useState('');
+          const KUPON_PER_PAGE = 25;
           const [formData, setFormData] = useState({
             kelas: 'X1',
             koordinator: '',
@@ -283,13 +287,27 @@
             const jumlah = getJumlahKupon();
             if (jumlah > 0) {
               if (!showKuponInput) {
-                // Initialize array dengan jumlah kupon yang akan diterbitkan
                 setNomorKuponList(Array(jumlah).fill(''));
               }
               setShowKuponInput(!showKuponInput);
             } else {
               showToast('Berat belum cukup untuk kupon', 'warning');
             }
+          };
+
+          const generateKodeUnik = () => {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let result = '';
+            for (let i = 0; i < 6; i++) {
+              result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+          };
+
+          const generateNomorKupon = () => {
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+            return `BSDA-RNDM-${dateStr}-${generateKodeUnik()}`;
           };
 
           const handleSubmit = () => {
@@ -304,6 +322,7 @@
 
             let totalBerat = 0;
             const newTransactions = [];
+            const setoranId = `SET-${Date.now()}-${generateKodeUnik()}`;
 
             if (modePisahJenis) {
               if (selectedTypes.length === 0) {
@@ -311,7 +330,6 @@
                 return;
               }
 
-              // Validasi berat per jenis
               for (const type of selectedTypes) {
                 if (!beratPerJenis[type] || beratPerJenis[type] <= 0) {
                   showToast(`Masukkan berat untuk ${type}!`, 'error');
@@ -319,7 +337,6 @@
                 }
               }
 
-              // Buat transaksi per jenis
               selectedTypes.forEach(jenis => {
                 const berat = beratPerJenis[jenis];
                 totalBerat += berat;
@@ -328,6 +345,7 @@
                 
                 newTransactions.push({
                   id: Date.now() + Math.random(),
+                  setoranId: setoranId,
                   kelas: formData.kelas,
                   koordinator: formData.koordinator,
                   jenisSampah: jenis,
@@ -340,7 +358,6 @@
                 });
               });
             } else {
-              // Mode akumulasi
               const beratAkumulasi = parseFloat(document.getElementById('beratAkumulasi')?.value || 0);
               if (!beratAkumulasi || beratAkumulasi <= 0) {
                 showToast('Masukkan berat sampah!', 'error');
@@ -352,6 +369,7 @@
               
               newTransactions.push({
                 id: Date.now(),
+                setoranId: setoranId,
                 kelas: formData.kelas,
                 koordinator: formData.koordinator,
                 jenisSampah: 'Akumulasi',
@@ -364,19 +382,18 @@
               });
             }
 
-            // Generate kupon berdasarkan TOTAL BERAT
             const jumlahKupon = Math.floor(totalBerat / beratPerKupon);
             const newCoupons = [];
             
             if (jumlahKupon > 0) {
-              // Filter nomor kupon yang sudah diisi
               const nomorTerisi = nomorKuponList.filter(n => n && n.trim());
               
               if (nomorTerisi.length > 0) {
-                // Jika ada nomor yang diisi, buat kupon per nomor
                 nomorTerisi.forEach((nomor, idx) => {
                   newCoupons.push({
+                    id: `KPN-${Date.now()}-${idx}-${generateKodeUnik()}`,
                     nomor: nomor.trim(),
+                    setoranId: setoranId,
                     kelas: formData.kelas,
                     koordinator: formData.koordinator,
                     berat: totalBerat,
@@ -387,10 +404,11 @@
                   });
                 });
               } else {
-                // Jika tidak ada nomor diisi, buat kupon sebanyak jumlah yang seharusnya
                 for (let i = 0; i < jumlahKupon; i++) {
                   newCoupons.push({
-                    nomor: '-',
+                    id: `KPN-${Date.now()}-${i}-${generateKodeUnik()}`,
+                    nomor: generateNomorKupon(),
+                    setoranId: setoranId,
                     kelas: formData.kelas,
                     koordinator: formData.koordinator,
                     berat: totalBerat,
@@ -408,7 +426,6 @@
               setCoupons(prev => [...newCoupons, ...prev]);
             }
             
-            // Reset form
             setFormData({ kelas: 'X1', koordinator: '', petugas: '', catatan: '' });
             setSelectedWasteTypes({});
             setBeratPerJenis({});
@@ -422,6 +439,52 @@
           const handleDeleteTransaction = (id) => {
             setTransactions(prev => prev.filter(t => t.id !== id));
             showToast('Data berhasil dihapus', 'success');
+          };
+
+          const handleDeleteKupon = (id) => {
+            if (confirm('Yakin ingin menghapus kupon ini?')) {
+              setCoupons(prev => prev.filter(c => c.id !== id));
+              showToast('Kupon berhasil dihapus', 'success');
+            }
+          };
+
+          const handleEditKupon = (kupon) => {
+            setEditingKupon(kupon.id);
+            setEditNomorValue(kupon.nomor);
+          };
+
+          const handleSaveEditKupon = () => {
+            if (!editNomorValue.trim()) {
+              showToast('Nomor kupon tidak boleh kosong', 'error');
+              return;
+            }
+            setCoupons(prev => prev.map(c => 
+              c.id === editingKupon ? { ...c, nomor: editNomorValue.trim() } : c
+            ));
+            setEditingKupon(null);
+            setEditNomorValue('');
+            showToast('Nomor kupon berhasil diubah', 'success');
+          };
+
+          const handleCancelEditKupon = () => {
+            setEditingKupon(null);
+            setEditNomorValue('');
+          };
+
+          const getKuponPerKelas = () => {
+            const perKelas = {};
+            coupons.forEach(c => {
+              if (!perKelas[c.kelas]) {
+                perKelas[c.kelas] = { tersedia: 0, digunakan: 0, total: 0 };
+              }
+              perKelas[c.kelas].total += 1;
+              if (c.digunakan) {
+                perKelas[c.kelas].digunakan += 1;
+              } else {
+                perKelas[c.kelas].tersedia += 1;
+              }
+            });
+            return perKelas;
           };
 
           const addWasteType = () => {
@@ -668,13 +731,20 @@
             const coupon = coupons.find(c => c.nomor === nomor.trim() && !c.digunakan);
             if (coupon) {
               setCoupons(prev => prev.map(c => 
-                c.nomor === nomor.trim() ? { ...c, digunakan: true, tanggalDigunakan: new Date().toISOString() } : c
+                c.id === coupon.id ? { ...c, digunakan: true, tanggalDigunakan: new Date().toISOString() } : c
               ));
-              showToast(`Kupon #${nomor} berhasil digunakan!`, 'success');
+              showToast(`Kupon ${nomor} berhasil digunakan!`, 'success');
             } else {
               showToast('Kupon tidak valid atau sudah digunakan', 'error');
             }
           };
+
+          const paginatedCoupons = coupons.slice(
+            kuponPage * KUPON_PER_PAGE,
+            (kuponPage + 1) * KUPON_PER_PAGE
+          );
+          const totalKuponPages = Math.ceil(coupons.length / KUPON_PER_PAGE);
+          const kuponPerKelas = getKuponPerKelas();
 
           const summary = getSummary();
           const filteredTransactions = getFilteredTransactions();
@@ -978,19 +1048,23 @@
                           <table className="w-full border-collapse text-sm">
                             <thead>
                               <tr className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
-                                <th className={`border ${borderClass} p-2 text-left`}>Tanggal</th>
-                                <th className={`border ${borderClass} p-2 text-left`}>Kelas</th>
-                                <th className={`border ${borderClass} p-2 text-left`}>Koordinator</th>
-                                <th className={`border ${borderClass} p-2 text-left`}>Jenis</th>
-                                <th className={`border ${borderClass} p-2 text-right`}>Berat</th>
-                                <th className={`border ${borderClass} p-2 text-right`}>Total</th>
-                                <th className={`border ${borderClass} p-2 text-left`}>Catatan</th>
-                                <th className={`border ${borderClass} p-2`}>Aksi</th>
+                                <th className={`border ${borderClass} p-2 text-left min-w-[120px]`}>ID Setoran</th>
+                                <th className={`border ${borderClass} p-2 text-left min-w-[140px]`}>Tanggal</th>
+                                <th className={`border ${borderClass} p-2 text-left min-w-[60px]`}>Kelas</th>
+                                <th className={`border ${borderClass} p-2 text-left min-w-[100px]`}>Koordinator</th>
+                                <th className={`border ${borderClass} p-2 text-left min-w-[80px]`}>Jenis</th>
+                                <th className={`border ${borderClass} p-2 text-right min-w-[70px]`}>Berat</th>
+                                <th className={`border ${borderClass} p-2 text-right min-w-[100px]`}>Total</th>
+                                <th className={`border ${borderClass} p-2 text-left min-w-[120px]`}>Catatan</th>
+                                <th className={`border ${borderClass} p-2 min-w-[60px]`}>Aksi</th>
                               </tr>
                             </thead>
                             <tbody>
                               {filteredTransactions.slice(0, 10).map(t => (
                                 <tr key={t.id} className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
+                                  <td className={`border ${borderClass} p-2 text-xs font-mono`}>
+                                    {t.setoranId?.substring(0, 20)}...
+                                  </td>
                                   <td className={`border ${borderClass} p-2 text-xs`}>
                                     {new Date(t.tanggal).toLocaleString('id-ID')}
                                   </td>
@@ -1193,33 +1267,89 @@
                       Gunakan Kupon
                     </button>
 
+                    <div className="mb-6">
+                      <h3 className="text-lg font-bold mb-3">Kupon Per Kelas</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {Object.entries(kuponPerKelas).map(([kelas, data]) => (
+                          <div key={kelas} className={`p-3 rounded-lg border ${borderClass}`}>
+                            <div className="font-bold text-lg">{kelas}</div>
+                            <div className="text-sm mt-1">
+                              <span className="text-green-600">✓ {data.tersedia} Tersedia</span>
+                              {' | '}
+                              <span className="text-red-600">✗ {data.digunakan} Digunakan</span>
+                            </div>
+                            <div className="text-xs opacity-75 mt-1">Total: {data.total} kupon</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold">Daftar Kupon</h3>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setKuponPage(Math.max(0, kuponPage - 1))}
+                          disabled={kuponPage === 0}
+                          className={`p-2 rounded ${kuponPage === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                        >
+                          ←
+                        </button>
+                        <span className="text-sm">
+                          {kuponPage * KUPON_PER_PAGE + 1} - {Math.min((kuponPage + 1) * KUPON_PER_PAGE, coupons.length)} dari {coupons.length}
+                        </span>
+                        <button
+                          onClick={() => setKuponPage(Math.min(totalKuponPages - 1, kuponPage + 1))}
+                          disabled={kuponPage >= totalKuponPages - 1}
+                          className={`p-2 rounded ${kuponPage >= totalKuponPages - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                        >
+                          →
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
-                            <th className={`border ${borderClass} p-2 text-left`}>Nomor Kupon</th>
-                            <th className={`border ${borderClass} p-2 text-left`}>Kelas</th>
-                            <th className={`border ${borderClass} p-2 text-left`}>Koordinator</th>
-                            <th className={`border ${borderClass} p-2 text-right`}>Berat Total</th>
-                            <th className={`border ${borderClass} p-2 text-left`}>Urutan</th>
-                            <th className={`border ${borderClass} p-2 text-left`}>Tanggal Terbit</th>
-                            <th className={`border ${borderClass} p-2 text-left`}>Status</th>
+                            <th className={`border ${borderClass} p-2 text-left min-w-[180px]`}>Nomor Kupon</th>
+                            <th className={`border ${borderClass} p-2 text-left min-w-[120px]`}>ID Setoran</th>
+                            <th className={`border ${borderClass} p-2 text-left min-w-[60px]`}>Kelas</th>
+                            <th className={`border ${borderClass} p-2 text-left min-w-[100px]`}>Koordinator</th>
+                            <th className={`border ${borderClass} p-2 text-right min-w-[100px]`}>Berat Total</th>
+                            <th className={`border ${borderClass} p-2 text-center min-w-[80px]`}>Urutan</th>
+                            <th className={`border ${borderClass} p-2 text-left min-w-[140px]`}>Tanggal</th>
+                            <th className={`border ${borderClass} p-2 text-left min-w-[80px]`}>Status</th>
+                            <th className={`border ${borderClass} p-2 text-center min-w-[120px]`}>Aksi</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {coupons.slice(0, 50).map((c, idx) => (
-                            <tr key={idx}>
-                              <td className={`border ${borderClass} p-2 font-bold ${c.nomor === '-' ? 'text-gray-400' : 'text-green-600'}`}>
-                                {c.nomor}
+                          {paginatedCoupons.map((c) => (
+                            <tr key={c.id}>
+                              <td className={`border ${borderClass} p-2`}>
+                                {editingKupon === c.id ? (
+                                  <input
+                                    type="text"
+                                    value={editNomorValue}
+                                    onChange={(e) => setEditNomorValue(e.target.value)}
+                                    className={`w-full p-1 text-xs border rounded ${darkMode ? 'bg-gray-700' : 'bg-white'}`}
+                                  />
+                                ) : (
+                                  <span className={`font-mono text-xs ${c.nomor.startsWith('BSDA-RNDM') ? 'text-blue-600' : 'text-green-600'} font-bold`}>
+                                    {c.nomor}
+                                  </span>
+                                )}
+                              </td>
+                              <td className={`border ${borderClass} p-2 text-xs font-mono`}>
+                                {c.setoranId?.substring(0, 15)}...
                               </td>
                               <td className={`border ${borderClass} p-2`}>{c.kelas}</td>
                               <td className={`border ${borderClass} p-2`}>{c.koordinator}</td>
                               <td className={`border ${borderClass} p-2 text-right`}>
                                 {c.berat.toFixed(2)} kg
-                                <span className="text-xs opacity-75 ml-1">({c.jumlahTotal} kupon)</span>
+                                <span className="text-xs opacity-75 block">({c.jumlahTotal} kupon)</span>
                               </td>
                               <td className={`border ${borderClass} p-2 text-center`}>
-                                {c.urutanKe > 0 ? `#${c.urutanKe} dari ${c.jumlahTotal}` : '-'}
+                                #{c.urutanKe} / {c.jumlahTotal}
                               </td>
                               <td className={`border ${borderClass} p-2 text-xs`}>
                                 {new Date(c.tanggal).toLocaleString('id-ID')}
@@ -1230,6 +1360,43 @@
                                 }`}>
                                   {c.digunakan ? 'Digunakan' : 'Tersedia'}
                                 </span>
+                              </td>
+                              <td className={`border ${borderClass} p-2 text-center`}>
+                                {editingKupon === c.id ? (
+                                  <div className="flex gap-1 justify-center">
+                                    <button
+                                      onClick={handleSaveEditKupon}
+                                      className="text-green-600 hover:text-green-800 p-1"
+                                      title="Simpan"
+                                    >
+                                      <Save size={16} />
+                                    </button>
+                                    <button
+                                      onClick={handleCancelEditKupon}
+                                      className="text-gray-600 hover:text-gray-800 p-1"
+                                      title="Batal"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-1 justify-center">
+                                    <button
+                                      onClick={() => handleEditKupon(c)}
+                                      className="text-blue-600 hover:text-blue-800 p-1"
+                                      title="Edit"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteKupon(c.id)}
+                                      className="text-red-600 hover:text-red-800 p-1"
+                                      title="Hapus"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           ))}
